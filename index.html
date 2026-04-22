@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRUD</title>
+    <link rel="stylesheet" href="index.css">
+    <!-- Iconos Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Panel Izquierdo -->
+        <aside class="glass-panel">
+            <div class="brand">
+                <i data-lucide="shield-check" size="32"></i>
+                <h1>CrudHibrido</h1>
+            </div>
+
+            <section class="form-wrapper">
+                <span class="form-title" id="form-title">Registro de Usuario</span>
+
+                <input type="hidden" id="act_id">
+
+                <div class="input-block">
+                    <label>Nombre Completo</label>
+                    <input type="text" id="crear_nombre" class="custom-input" placeholder="p. ej. Sebastian">
+                </div>
+
+                <div class="input-block">
+                    <label>Correo Electrónico</label>
+                    <input type="email" id="crear_email" class="custom-input" placeholder="ejemplo@correo.com">
+                </div>
+
+                <div class="input-block">
+                    <label>Edad</label>
+                    <input type="number" id="crear_edad" class="custom-input" placeholder="21">
+                </div>
+
+                <button id="btn-save" class="btn-primary" onclick="guardar()">
+                    <i data-lucide="zap"></i>
+                    <span>Ejecutar Acción</span>
+                </button>
+
+                <button id="btn-cancel" class="btn-cancel" style="display:none;" onclick="limpiarFormulario()">
+                    <i data-lucide="rotate-ccw"></i>
+                    <span>Restaurar Formulario</span>
+                </button>
+
+                <!-- Indicadores de Salud de los Clústeres -->
+                <div class="connection-status">
+                    <div class="status-item">
+                        <div id="dot-local" class="dot"></div>
+                        <span>LOCAL RS</span>
+                    </div>
+                    <div class="status-item">
+                        <div id="dot-atlas" class="dot"></div>
+                        <span>ATLAS CLOUD</span>
+                    </div>
+                </div>
+            </section>
+        </aside>
+
+        <!-- Área Principal -->
+        <main class="main-content">
+            <div class="header-row">
+                <h2>Directorio Actual</h2>
+                <button class="icon-btn" onclick="cargar()" title="Sincronizar">
+                    <i data-lucide="refresh-cw"></i>
+                </button>
+            </div>
+
+            <div id="user-grid" class="grid">
+                <!-- Tarjetas inyectadas vía JS -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal de Confirmación -->
+    <div id="delete-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-icon">
+                <i data-lucide="alert-triangle" size="32"></i>
+            </div>
+            <h3>¿Eliminar Usuario?</h3>
+            <p>Esta acción no se puede deshacer. El registro desaparecerá del clúster permanentemente.</p>
+            <div class="modal-actions">
+                <button class="btn-danger" onclick="ejecutarBorrado()">Eliminar ahora</button>
+                <button class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notificaciones -->
+    <div id="toast">Operación Exitosa</div>
+
+    <script>
+        let editMode = false;
+        let idParaEliminar = null;
+
+        async function updateHealth() {
+            try {
+                const res = await fetch('/health');
+                const health = await res.json();
+
+                const dotLocal = document.getElementById('dot-local');
+                const dotAtlas = document.getElementById('dot-atlas');
+
+                if (health.local) dotLocal.className = 'dot online';
+                else dotLocal.className = 'dot offline';
+
+                if (health.atlas) dotAtlas.className = 'dot online';
+                else dotAtlas.className = 'dot offline';
+
+                lucide.createIcons();
+            } catch (err) { }
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.add('show');
+            setTimeout(() => { t.classList.remove('show'); }, 3000);
+        }
+
+
+        // --- Gestión del Modal ---
+        function abrirModal(id) {
+            idParaEliminar = id;
+            document.getElementById('delete-modal').classList.add('active');
+        }
+
+        function cerrarModal() {
+            idParaEliminar = null;
+            document.getElementById('delete-modal').classList.remove('active');
+        }
+
+        async function ejecutarBorrado() {
+            if (!idParaEliminar) return;
+            try {
+                const res = await fetch(`/usuarios/${idParaEliminar}`, { method: 'DELETE' });
+                showToast("Registro eliminado");
+                cerrarModal();
+                cargar();
+            } catch (err) {
+                showToast("Error al eliminar");
+            }
+        }
+
+        async function cargar() {
+            try {
+                const res = await fetch('/usuarios');
+                const usuarios = await res.json();
+                const grid = document.getElementById('user-grid');
+                grid.innerHTML = '';
+
+                if (usuarios.length === 0) {
+                    grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 4rem;">Sin registros en el clúster.</div>';
+                    return;
+                }
+
+                usuarios.forEach((u, i) => {
+                    const initial = u.nombre.charAt(0).toUpperCase();
+                    const card = document.createElement('div');
+                    card.className = 'user-card';
+                    card.style.animationDelay = `${i * 0.1}s`;
+                    const shortId = u._id.substring(u._id.length - 6).toUpperCase();
+                    card.innerHTML = `
+                        <div class="uid-badge">ID: ${shortId}</div>
+                        <div class="avatar-circle">${initial}</div>
+                        <h4>${u.nombre}</h4>
+                        <span class="email-text">${u.email}</span>
+                        <div class="card-footer">
+                            <span class="tag">Edad: ${u.edad}</span>
+                            <div class="row-actions">
+                                <button class="icon-btn" onclick="prepararEdicion('${u._id}', '${u.nombre}', '${u.email}', '${u.edad}')">
+                                    <i data-lucide="arrow-up-right" size="18"></i>
+                                </button>
+                                <button class="icon-btn delete" onclick="abrirModal('${u._id}')">
+                                    <i data-lucide="trash" size="18"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+                lucide.createIcons();
+            } catch (err) {
+                showToast("Falla de conexión");
+            }
+        }
+
+        function limpiarFormulario() {
+            document.getElementById('act_id').value = '';
+            document.getElementById('crear_nombre').value = '';
+            document.getElementById('crear_email').value = '';
+            document.getElementById('crear_edad').value = '';
+
+            document.getElementById('form-title').innerText = "Registro de Usuario";
+            document.getElementById('btn-save').querySelector('span').innerText = "Ejecutar Acción";
+            document.getElementById('btn-cancel').style.display = 'none';
+            editMode = false;
+        }
+
+        function prepararEdicion(id, nombre, email, edad) {
+            document.getElementById('act_id').value = id;
+            document.getElementById('crear_nombre').value = nombre;
+            document.getElementById('crear_email').value = email;
+            document.getElementById('crear_edad').value = edad;
+
+            document.getElementById('form-title').innerText = "Modo Edición";
+            document.getElementById('btn-save').querySelector('span').innerText = "Actualizar Clúster";
+            document.getElementById('btn-cancel').style.display = 'block';
+            editMode = true;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function guardar() {
+            const id = document.getElementById('act_id').value;
+            const datos = {
+                nombre: document.getElementById('crear_nombre').value,
+                email: document.getElementById('crear_email').value,
+                edad: document.getElementById('crear_edad').value
+            };
+
+            if (!datos.nombre || !datos.email) {
+                showToast("Datos incompletos");
+                return;
+            }
+
+            const method = editMode ? 'PUT' : 'POST';
+            const endpoint = editMode ? `/usuarios/${id}` : '/usuarios';
+
+            try {
+                await fetch(endpoint, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(datos)
+                });
+
+                showToast(editMode ? "Clúster actualizado" : "Usuario registrado");
+                limpiarFormulario();
+                cargar();
+            } catch (err) {
+                showToast("Error de servidor");
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            cargar();
+            updateHealth(); // Carga inicial
+            setInterval(updateHealth, 5000); // Polling cada 5s
+            lucide.createIcons();
+        });
+    </script>
+</body>
+
+</html>
