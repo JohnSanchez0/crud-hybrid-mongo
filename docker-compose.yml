@@ -7,7 +7,7 @@ services:
       - "27017:27017"
     volumes:
       - ./data/nodo1:/data/db
-    restart: always
+    restart: "no"
 
   nodo2:
     image: mongo:latest
@@ -17,7 +17,7 @@ services:
       - "27018:27018"
     volumes:
       - ./data/nodo2:/data/db
-    restart: always
+    restart: "no"
 
   nodo3:
     image: mongo:latest
@@ -27,7 +27,7 @@ services:
       - "27019:27019"
     volumes:
       - ./data/nodo3:/data/db
-    restart: always
+    restart: "no"
 
   arb:
     image: mongo:latest
@@ -37,7 +37,7 @@ services:
       - "27020:27020"
     volumes:
       - ./data/arb:/data/db
-    restart: always
+    restart: "no"
 
   app:
     image: node:latest
